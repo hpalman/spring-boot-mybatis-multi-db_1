@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: spring-boot-mybatis-multi-db
+
+  datasource:
+    mysql:
+      #jdbc-url: jdbc:sqlserver://hpmpc-main:1433;databaseName=STUDY;integratedSecurity=true;encrypt=false;trustServerCertificate=true
+      jdbc-url: jdbc:sqlserver://localhost:1433;databaseName=STUDY;;integratedSecurity=false;encrypt=true;trustServerCertificate=true
+      username: study
+      password: study
+      driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    postgres:
+      driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+      jdbc-url: jdbc:sqlserver://localhost:1433;databaseName=SEIZE_BASE;integratedSecurity=false;encrypt=true;trustServerCertificate=true
+      #jdbc-url: jdbc:sqlserver://hpmpc-main:1433;databaseName=SEIZE_BASE;integratedSecurity=true;encrypt=false;trustServerCertificate=true
+      username: SEIZE_BASE
+      password: seize!2020
+  
+  mybatis:
+    config-location: classpath:mybatis-config.xml
+    mapper-locations:
+      - classpath:mapper/mysql/*.xml
+      - classpath:mapper/postgres/*.xml
+logging:
+  level:
+    root: DEBUG
+
+server:
+  port: 9090
+      
