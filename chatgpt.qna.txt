@@ -1,0 +1,535 @@
+Q> show me a best example of java spring boot mybatis example of multiple dbms with mapper xml file and no mapper interface
+
+To set up a Spring Boot application using MyBatis with multiple databases, using XML-based mappers and without Mapper interfaces,
+follow the steps below. This example will demonstrate how to configure two different databases (e.g., MySQL and PostgreSQL) in the same Spring Boot application.
+
+1. Set Up the Project
+Create a Maven project and add the necessary dependencies in your pom.xml.
+
+pom.xml:
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>spring-boot-mybatis-multi-db</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.1.2</version> <!-- Use the latest version -->
+    </parent>
+
+    <dependencies>
+        <!-- Spring Boot Starter Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- MyBatis Spring Boot Starter -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>3.0.0</version>
+        </dependency>
+
+        <!-- MySQL Driver -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- PostgreSQL Driver -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Lombok (Optional) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+2. Configure the Application
+Set up your database connections and MyBatis configurations in application.yml.
+
+src/main/resources/application.yml:
+
+spring:
+  datasource:
+    mysql:
+      url: jdbc:mysql://localhost:3306/mybatis_example_db_mysql
+      username: root
+      password: your_password
+      driver-class-name: com.mysql.cj.jdbc.Driver
+    postgres:
+      url: jdbc:postgresql://localhost:5432/mybatis_example_db_postgres
+      username: postgres
+      password: your_password
+      driver-class-name: org.postgresql.Driver
+
+  mybatis:
+    config-location: classpath:mybatis-config.xml
+    mapper-locations:
+      - classpath:mapper/mysql/*.xml
+      - classpath:mapper/postgres/*.xml
+3. Create DataSource Configurations
+You need to create two separate DataSource beans for MySQL and PostgreSQL, and configure MyBatis to use them.
+
+src/main/java/com/example/mybatisdemo/config/DataSourceConfig.java:
+
+package com.example.mybatisdemo.config;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.SqlSessionFactoryBean;
+import org.mybatis.spring.SqlSessionTemplate;
+import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+
+import javax.sql.DataSource;
+import org.springframework.boot.jdbc.DataSourceBuilder;
+
+@Configuration
+public class DataSourceConfig {
+
+    // MySQL DataSource Configuration
+    @Bean(name = "mysqlDataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.mysql")
+    @Primary
+    public DataSource mysqlDataSource() {
+        return DataSourceBuilder.create().build();
+    }
+
+    @Bean(name = "mysqlSqlSessionFactory")
+    @Primary
+    public SqlSessionFactory mysqlSqlSessionFactory(@Qualifier("mysqlDataSource") DataSource dataSource) throws Exception {
+        SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
+        sessionFactory.setDataSource(dataSource);
+        sessionFactory.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath:mapper/mysql/*.xml"));
+        return sessionFactory.getObject();
+    }
+
+    @Bean(name = "mysqlTransactionManager")
+    @Primary
+    public DataSourceTransactionManager mysqlTransactionManager(@Qualifier("mysqlDataSource") DataSource dataSource) {
+        return new DataSourceTransactionManager(dataSource);
+    }
+
+    @Bean(name = "mysqlSqlSessionTemplate")
+    @Primary
+    public SqlSessionTemplate mysqlSqlSessionTemplate(@Qualifier("mysqlSqlSessionFactory") SqlSessionFactory sqlSessionFactory) {
+        return new SqlSessionTemplate(sqlSessionFactory);
+    }
+
+    // PostgreSQL DataSource Configuration
+    @Bean(name = "postgresDataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.postgres")
+    public DataSource postgresDataSource() {
+        return DataSourceBuilder.create().build();
+    }
+
+    @Bean(name = "postgresSqlSessionFactory")
+    public SqlSessionFactory postgresSqlSessionFactory(@Qualifier("postgresDataSource") DataSource dataSource) throws Exception {
+        SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
+        sessionFactory.setDataSource(dataSource);
+        sessionFactory.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath:mapper/postgres/*.xml"));
+        return sessionFactory.getObject();
+    }
+
+    @Bean(name = "postgresTransactionManager")
+    public DataSourceTransactionManager postgresTransactionManager(@Qualifier("postgresDataSource") DataSource dataSource) {
+        return new DataSourceTransactionManager(dataSource);
+    }
+
+    @Bean(name = "postgresSqlSessionTemplate")
+    public SqlSessionTemplate postgresSqlSessionTemplate(@Qualifier("postgresSqlSessionFactory") SqlSessionFactory sqlSessionFactory) {
+        return new SqlSessionTemplate(sqlSessionFactory);
+    }
+}
+4. Create the Model Classes
+Define model classes that represent the tables in both databases.
+
+src/main/java/com/example/mybatisdemo/model/UserMySQL.java:
+
+package com.example.mybatisdemo.model;
+
+public class UserMySQL {
+    private Long id;
+    private String name;
+    private String email;
+
+    // Getters and setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+}
+src/main/java/com/example/mybatisdemo/model/UserPostgres.java:
+
+package com.example.mybatisdemo.model;
+
+public class UserPostgres {
+    private Long id;
+    private String name;
+    private String email;
+
+    // Getters and setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+}
+5. Create the MyBatis XML Configuration
+Set up the global MyBatis configuration in mybatis-config.xml.
+
+src/main/resources/mybatis-config.xml:
+
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE configuration
+        PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+    <typeAliases>
+        <typeAlias alias="userMySQL" type="com.example.mybatisdemo.model.UserMySQL"/>
+        <typeAlias alias="userPostgres" type="com.example.mybatisdemo.model.UserPostgres"/>
+    </typeAliases>
+</configuration>
+6. Create the Mapper XML Files
+Define SQL queries directly in the MyBatis XML mapper files for both MySQL and PostgreSQL.
+
+src/main/resources/mapper/mysql/UserMapper.xml:
+
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="UserMapperMySQL">
+
+    <resultMap id="userResultMap" type="userMySQL">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="email" column="email"/>
+    </resultMap>
+
+    <select id="findById" resultMap="userResultMap">
+        SELECT * FROM users WHERE id = #{id}
+    </select>
+
+    <select id="findAll" resultMap="userResultMap">
+        SELECT * FROM users
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO users (name, email) VALUES (#{name}, #{email})
+    </insert>
+
+    <update id="update">
+        UPDATE users SET name=#{name}, email=#{email} WHERE id=#{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM users WHERE id=#{id}
+    </delete>
+</mapper>
+src/main/resources/mapper/postgres/UserMapper.xml:
+
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="UserMapperPostgres">
+
+    <resultMap id="userResultMap" type="userPostgres">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="email" column="email"/>
+    </resultMap>
+
+    <select id="findById" resultMap="userResultMap">
+        SELECT * FROM users WHERE id = #{id}
+    </select>
+
+    <select id="findAll" resultMap="userResultMap">
+        SELECT * FROM users
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO users (name, email) VALUES (#{name}, #{email})
+    </insert>
+
+    <update id="update">
+        UPDATE users SET name=#{name}, email=#{email} WHERE id=#{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM users WHERE id=#{id}
+    </delete>
+</mapper>
+7. Create the Service Layer
+Create two service classes that use MyBatis' SqlSession directly to execute SQL queries for MySQL and PostgreSQL.
+
+src/main/java/com/example/mybatisdemo/service/UserMySQLService.java:
+
+package com.example.mybatisdemo.service;
+
+import com.example.mybatisdemo.model.UserMySQL;
+import org.apache.ibatis.session.SqlSession;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class UserMySQLService {
+
+    private final SqlSession sqlSession;
+
+    public UserMySQLService(SqlSession sqlSession) {
+        this.sqlSession = sqlSession;
+    }
+
+    public UserMySQL findById(Long id) {
+        return sqlSession.selectOne("UserMapperMySQL.findById", id);
+    }
+
+    public List<UserMySQL> findAll() {
+        return sqlSession.selectList("UserMapperMySQL.findAll");
+    }
+
+    public void save(UserMySQL user) {
+        if (user.getId() == null) {
+            sqlSession.insert("UserMapperMySQL.insert", user);
+        } else {
+            sqlSession.update("UserMapperMySQL.update", user);
+        }
+    }
+
+    public void delete(Long id) {
+        sqlSession.delete("UserMapperMySQL.delete", id);
+    }
+}
+src/main/java/com/example/mybatisdemo/service/UserPostgresService.java:
+
+package com.example.mybatisdemo.service;
+
+import com.example.mybatisdemo.model.UserPostgres;
+import org.apache.ibatis.session.SqlSession;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class UserPostgresService {
+
+    private final SqlSession sqlSession;
+
+    public UserPostgresService(SqlSession sqlSession) {
+        this.sqlSession = sqlSession;
+    }
+
+    public UserPostgres findById(Long id) {
+        return sqlSession.selectOne("UserMapperPostgres.findById", id);
+    }
+
+    public List<UserPostgres> findAll() {
+        return sqlSession.selectList("UserMapperPostgres.findAll");
+    }
+
+    public void save(UserPostgres user) {
+        if (user.getId() == null) {
+            sqlSession.insert("UserMapperPostgres.insert", user);
+        } else {
+            sqlSession.update("UserMapperPostgres.update", user);
+        }
+    }
+
+    public void delete(Long id) {
+        sqlSession.delete("UserMapperPostgres.delete", id);
+    }
+}
+8. Create the REST Controllers
+Expose the service layers through REST API endpoints for both MySQL and PostgreSQL.
+
+src/main/java/com/example/mybatisdemo/controller/UserMySQLController.java:
+
+package com.example.mybatisdemo.controller;
+
+import com.example.mybatisdemo.model.UserMySQL;
+import com.example.mybatisdemo.service.UserMySQLService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/mysql/users")
+public class UserMySQLController {
+
+    private final UserMySQLService userService;
+
+    public UserMySQLController(UserMySQLService userService) {
+        this.userService = userService;
+    }
+
+    @GetMapping
+    public List<UserMySQL> getAllUsers() {
+        return userService.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserMySQL> getUserById(@PathVariable Long id) {
+        UserMySQL user = userService.findById(id);
+        if (user != null) {
+            return ResponseEntity.ok(user);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
+    }
+
+    @PostMapping
+    public ResponseEntity<UserMySQL> createUser(@RequestBody UserMySQL user) {
+        userService.save(user);
+        return ResponseEntity.status(HttpStatus.CREATED).body(user);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<UserMySQL> updateUser(@PathVariable Long id, @RequestBody UserMySQL user) {
+        user.setId(id);
+        userService.save(user);
+        return ResponseEntity.ok(user);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        userService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+}
+src/main/java/com/example/mybatisdemo/controller/UserPostgresController.java:
+
+package com.example.mybatisdemo.controller;
+
+import com.example.mybatisdemo.model.UserPostgres;
+import com.example.mybatisdemo.service.UserPostgresService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/postgres/users")
+public class UserPostgresController {
+
+    private final UserPostgresService userService;
+
+    public UserPostgresController(UserPostgresService userService) {
+        this.userService = userService;
+    }
+
+    @GetMapping
+    public List<UserPostgres> getAllUsers() {
+        return userService.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserPostgres> getUserById(@PathVariable Long id) {
+        UserPostgres user = userService.findById(id);
+        if (user != null) {
+            return ResponseEntity.ok(user);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
+    }
+
+    @PostMapping
+    public ResponseEntity<UserPostgres> createUser(@RequestBody UserPostgres user) {
+        userService.save(user);
+        return ResponseEntity.status(HttpStatus.CREATED).body(user);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<UserPostgres> updateUser(@PathVariable Long id, @RequestBody UserPostgres user) {
+        user.setId(id);
+        userService.save(user);
+        return ResponseEntity.ok(user);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        userService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+}
+9. Create the Database Tables
+Run the following SQL scripts to create the necessary users table in both MySQL and PostgreSQL databases.
+
+For MySQL:
+
+CREATE TABLE users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL
+);
+For PostgreSQL:
+
+CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL
+);
+10. Run the Application
+You can now run your Spring Boot application using your IDE or Maven:
+
+mvn spring-boot:run
+11. Test the API
+You can use curl or Postman to test the API:
+
+MySQL Endpoints:
+
+Create a new user:
+
+curl -X POST http://localhost:8080/api/mysql/users -H "Content-Type: application/json" -d '{"name": "John Doe", "email": "john.doe@example.com"}'
+Get all users:
+
+curl http://localhost:8080/api/mysql/users
+PostgreSQL Endpoints:
+
+Create a new user:
+
+curl -X POST http://localhost:8080/api/postgres/users -H "Content-Type: application/json" -d '{"name": "Jane Doe", "email": "jane.doe@example.com"}'
+Get all users:
+
+curl http://localhost:8080/api/postgres/users
+This setup demonstrates how to use MyBatis with multiple databases, configured via XML mapper files and without using Mapper interfaces, in a Spring Boot application.
